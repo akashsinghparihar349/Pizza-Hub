@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { Link, useNavigate } from 'react-router-dom'
 
-
 import { getSetting } from "../Redux/ActionCreators/SettingActionCreators"
 import { getMaincategory } from "../Redux/ActionCreators/MaincategoryActionCreators"
+
 export default function Navbar() {
   let [settingData, setSettingData] = useState({
     siteName: import.meta.env.VITE_APP_SITE_NAME,
@@ -48,31 +48,34 @@ export default function Navbar() {
         })
       }
     })()
-  }, [SettingStateData.length])
+  }, [SettingStateData.length, dispatch])
 
   useEffect(() => {
     (() => {
       dispatch(getMaincategory())
     })()
-  }, [MaincategoryStateData.length])
+  }, [MaincategoryStateData.length, dispatch])
+
+  const userRole = localStorage.getItem("role")
+
   return (
     <>
       <div className="container-fluid px-5 border-bottom">
         <div className="row gx-0 align-items-center">
           <div className="col-lg-7 col-4 text-center d-flex align-items-center justify-content-center">
-            <a href={settingData.map1} target='_blank' className=" d-flex me-2">
+            <a href={settingData.map1} target='_blank' rel="noreferrer" className=" d-flex me-2">
               <i className='me-1 bi bi-geo-alt'></i>
               <span className='d-none d-xl-inline-block'>{settingData.address}</span>
             </a>
-            <a href={`mailto:${settingData.email}`} target='_blank' className=" d-flex me-2">
+            <a href={`mailto:${settingData.email}`} target='_blank' rel="noreferrer" className=" d-flex me-2">
               <i className='me-1 bi bi-envelope'></i>
               <span className='d-none d-xl-inline-block'>{settingData.email}</span>
             </a>
-            <a href={`tel:${settingData.phone}`} target='_blank' className=" d-flex me-2">
+            <a href={`tel:${settingData.phone}`} target='_blank' rel="noreferrer" className=" d-flex me-2">
               <i className='me-1 bi bi-telephone'></i>
               <span className='d-none d-xl-inline-block'>{settingData.phone}</span>
             </a>
-            <a href={`https://wa.me/${settingData.whatsapp}`} target='_blank' className=" d-flex me-2">
+            <a href={`https://wa.me/${settingData.whatsapp}`} target='_blank' rel="noreferrer" className=" d-flex me-2">
               <i className='me-1 bi bi-whatsapp'></i>
               <span className='d-none d-xl-inline-block'>{settingData.whatsapp}</span>
             </a>
@@ -80,28 +83,35 @@ export default function Navbar() {
 
           <div className="col-lg-5 col-8 text-center text-lg-end">
             <div className="d-inline-flex align-items-center" style={{ height: "45px" }}>
-              <a href={settingData.facebook} target='_blank' className=" me-2"> <i className='bi bi-facebook'></i></a>
-              <a href={settingData.twitter} target='_blank' className=" me-2"> <i className='bi bi-twitter'></i></a>
-              <a href={settingData.youtube} target='_blank' className=" me-2"> <i className='bi bi-youtube'></i></a>
-              <a href={settingData.linkedin} target='_blank' className=" me-2"> <i className='bi bi-linkedin'></i></a>
-              <a href={settingData.instagram} target='_blank' className=" me-2"> <i className='bi bi-instagram'></i></a>
-              {localStorage.getItem("login") ?
+              <a href={settingData.facebook} target='_blank' rel="noreferrer" className=" me-2"> <i className='bi bi-facebook'></i></a>
+              <a href={settingData.twitter} target='_blank' rel="noreferrer" className=" me-2"> <i className='bi bi-twitter'></i></a>
+              <a href={settingData.youtube} target='_blank' rel="noreferrer" className=" me-2"> <i className='bi bi-youtube'></i></a>
+              <a href={settingData.linkedin} target='_blank' rel="noreferrer" className=" me-2"> <i className='bi bi-linkedin'></i></a>
+              <a href={settingData.instagram} target='_blank' rel="noreferrer" className=" me-2"> <i className='bi bi-instagram'></i></a>
+              {localStorage.getItem("login") ? (
                 <div className="dropdown">
-                  <a href="#" className="dropdown-toggle  ms-2" data-bs-toggle="dropdown"><small><i
+                  <a href="#" className="dropdown-toggle ms-2" data-bs-toggle="dropdown"><small><i
                     className="fa fa-home me-2"></i> {localStorage.getItem("name")}</small></a>
-                  <div className="dropdown-menu rounded">
-                    <Link to="/profile?option=Profile" className="dropdown-item"> Profile</Link>
-                    {localStorage.getItem("role") === "Buyer" ? null : <Link to="/admin" className="dropdown-item"> Admin Dashboard</Link>}
-                    <Link to="/profile?option=Wishlist" className="dropdown-item"> Wishlist</Link>
-                    <Link to="/profile?option=Orders" className="dropdown-item"> Orders</Link>
-                    <Link to="/profile?option=Address" className="dropdown-item"> Address</Link>
-                    <Link to="/cart" className="dropdown-item"> Cart</Link>
-                    <Link to="/checkout" className="dropdown-item"> Checkout</Link>
-                    <button onClick={logout} className="dropdown-item"> Log Out</button>
+                  <div className="dropdown-menu rounded shadow-sm">
+                    <Link to="/profile?option=Profile" className="dropdown-item"><i className="bi bi-person me-2"></i>Profile</Link>
+                    {userRole === "Restaurant" && (
+                      <Link to="/restaurant/dashboard" className="dropdown-item text-primary fw-bold"><i className="bi bi-shop me-2"></i>Restaurant Portal</Link>
+                    )}
+                    {userRole === "Admin" || userRole === "Super Admin" ? (
+                      <Link to="/admin" className="dropdown-item text-primary fw-bold"><i className="bi bi-speedometer2 me-2"></i>Admin Dashboard</Link>
+                    ) : null}
+                    <Link to="/profile?option=Wishlist" className="dropdown-item"><i className="bi bi-heart me-2"></i>Wishlist</Link>
+                    <Link to="/profile?option=Orders" className="dropdown-item"><i className="bi bi-bag-check me-2"></i>Orders</Link>
+                    <Link to="/profile?option=Address" className="dropdown-item"><i className="bi bi-geo-alt me-2"></i>Address</Link>
+                    <Link to="/cart" className="dropdown-item"><i className="bi bi-cart me-2"></i>Cart</Link>
+                    <Link to="/checkout" className="dropdown-item"><i className="bi bi-credit-card me-2"></i>Checkout</Link>
+                    <hr className="dropdown-divider my-1" />
+                    <button onClick={logout} className="dropdown-item text-danger"><i className="bi bi-box-arrow-right me-2"></i>Log Out</button>
                   </div>
-                </div> :
+                </div>
+              ) : (
                 <Link to="/login" className=" me-2">Login</Link>
-              }
+              )}
             </div>
           </div>
         </div>
@@ -179,16 +189,8 @@ export default function Navbar() {
                   <Link to="/feature" className="nav-item nav-link text-light">Feature</Link>
                   <Link to="/faq" className="nav-item nav-link text-light">Faq</Link>
                   <Link to="/testimonial" className="nav-item nav-link text-light">Testimonial</Link>
+                  <Link to="/partner-with-us" className="nav-item nav-link text-light"><i className="bi bi-shop me-1"></i>Partner With Us</Link>
                   <Link to="/contact" className="nav-item nav-link text-light">Contact Us</Link>
-                  {/* <div className="nav-item dropdown">
-                    <a href="#" className="nav-link dropdown-toggle" data-bs-toggle="dropdown">Pages</a>
-                    <div className="dropdown-menu m-0">
-                      <a href="bestseller.html" className="dropdown-item">Bestseller</a>
-                      <a href="cart.html" className="dropdown-item">Cart Page</a>
-                      <a href="cheackout.html" className="dropdown-item">Cheackout</a>
-                      <a href="404.html" className="dropdown-item">404 Page</a>
-                    </div>
-                  </div> */}
                   <div className="nav-item dropdown d-block d-lg-none mb-3">
                     <a href="#" className="nav-link  text-light dropdown-toggle" data-bs-toggle="dropdown">Category</a>
                     <div className="dropdown-menu m-0">

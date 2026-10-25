@@ -13,11 +13,13 @@ import TestimonialSaga from "./TestimonialSagas";
 import NewsletterSaga from "./NewsletterSagas";
 import ContactUsSaga from "./ContactUsSagas";
 import UserSaga from "./UserSagas";
+import CategorySaga from "./CategorySagas";
 
 export default function* RootSaga() {
     yield all([
         MaincategorySaga(),
         SubcategorySaga(),
+        CategorySaga(),
         BrandSaga(),
         ProductSaga(),
         FeatureSaga(),

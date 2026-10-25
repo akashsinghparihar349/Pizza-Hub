@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate, useParams } from 'react-router-dom'
 
@@ -15,6 +15,8 @@ import { getProduct } from "../Redux/ActionCreators/ProductActionCreators"
 import { createCart, getCart } from "../Redux/ActionCreators/CartActionCreators"
 import { createWishlist, getWishlist } from "../Redux/ActionCreators/WishlistActionCreators"
 import { getTestimonial } from "../Redux/ActionCreators/TestimonialActionCreators"
+import { getCustomizationOptionsApi, calculatePriceApi } from "../Redux/Sagas/Service"
+
 const sliderOptions = {
     effect: 'cube',
     grabCursor: true,
@@ -29,6 +31,7 @@ const sliderOptions = {
     modules: [EffectCube, Pagination],
     className: "mySwiper"
 }
+
 const PIZZA_SIZE_METADATA = {
     "Small": { inches: "6 inches", label: "Small (6\")", defaultMultiplier: 0.8 },
     "Medium": { inches: "8 inches", label: "Medium (8\")", defaultMultiplier: 1.0 },
@@ -43,8 +46,21 @@ export default function ProductPage() {
 
     let [selected, setSelected] = useState({
         size: "Medium",
-        quantity: 1
+        quantity: 1,
+        baseId: "",
+        sauceId: "",
+        cheeseId: "",
+        veggieIds: []
     })
+    let [customizationOptions, setCustomizationOptions] = useState({
+        bases: [],
+        sauces: [],
+        cheeses: [],
+        veggies: []
+    })
+    let [serverPrice, setServerPrice] = useState(null)
+    let [customizationOpen, setCustomizationOpen] = useState(false)
+
     let [data, setData] = useState({
         pic: [],
         size: ["Small", "Medium", "Large", "Extra Large"],
@@ -60,7 +76,7 @@ export default function ProductPage() {
     let dispatch = useDispatch()
     let navigate = useNavigate()
 
-    // Determine size-specific price for selected size
+    // Determine size-specific price for selected size fallback
     const currentSizePriceObj = data.sizePrices?.find(sp => 
         sp.size?.toLowerCase() === selected.size?.toLowerCase() ||
         selected.size?.toLowerCase().startsWith(sp.size?.toLowerCase())
@@ -71,7 +87,13 @@ export default function ProductPage() {
     let currentFinalPrice
     let currentBasePrice
 
-    if (currentSizePriceObj && typeof currentSizePriceObj.price === "number") {
+    if (serverPrice && typeof serverPrice.unitPrice === "number") {
+        currentFinalPrice = serverPrice.unitPrice
+        const discountPercent = Number(data.discount) || 0
+        currentBasePrice = discountPercent > 0 
+            ? Math.round(currentFinalPrice / (1 - discountPercent / 100))
+            : currentFinalPrice
+    } else if (currentSizePriceObj && typeof currentSizePriceObj.price === "number") {
         currentFinalPrice = currentSizePriceObj.price
         const discountPercent = Number(data.discount) || 0
         currentBasePrice = discountPercent > 0 
@@ -83,43 +105,88 @@ export default function ProductPage() {
         currentFinalPrice = Math.round((Number(data.finalPrice) || (Number(data.basePrice) || 200)) * mult)
     }
 
+    // Call server price calculation API
+    const updateAuthoritativePrice = useCallback(async () => {
+        if (!data._id) return
+        try {
+            const res = await calculatePriceApi({
+                productId: data._id,
+                size: selected.size || "Regular",
+                baseId: selected.baseId || undefined,
+                sauceId: selected.sauceId || undefined,
+                cheeseId: selected.cheeseId || undefined,
+                veggieIds: selected.veggieIds || [],
+                quantity: selected.quantity || 1
+            })
+            if (res.result === "Done" && res.data) {
+                setServerPrice(res.data)
+            }
+        } catch {
+            // Graceful fallback to client math
+        }
+    }, [data._id, selected.size, selected.baseId, selected.sauceId, selected.cheeseId, selected.veggieIds, selected.quantity])
+
+    useEffect(() => {
+        updateAuthoritativePrice()
+    }, [updateAuthoritativePrice])
+
+    // Load available customization options from backend
+    useEffect(() => {
+        (async () => {
+            try {
+                const res = await getCustomizationOptionsApi()
+                if (res.result === "Done" && res.data) {
+                    setCustomizationOptions(res.data)
+                }
+            } catch {
+                // Ignore if unavailable
+            }
+        })()
+    }, [])
+
+    function toggleVeggie(veggieId) {
+        setSelected(prev => {
+            const exists = prev.veggieIds.includes(veggieId)
+            return {
+                ...prev,
+                veggieIds: exists 
+                    ? prev.veggieIds.filter(id => id !== veggieId)
+                    : [...prev.veggieIds, veggieId]
+            }
+        })
+    }
+
     function addToCart() {
         let userid = localStorage.getItem("userid")
         if (!userid) {
             navigate("/login")
             return
         }
-        let item = CartStateData.find(x => 
-            (x.product?._id === _id || x.product === _id) && 
-            (x.user?._id === userid || x.user === userid) &&
-            x.size === selected.size
-        )
-        if (!item) {
-            item = {
-                user: userid,
-                product: data._id,
-                quantity: selected.quantity,
-                size: selected.size || "Regular",
-                total: selected.quantity * currentFinalPrice,
-            }
-            dispatch(createCart({ ...item }))
+        let item = {
+            user: userid,
+            product: data._id,
+            quantity: selected.quantity,
+            size: selected.size || "Regular",
+            baseId: selected.baseId || undefined,
+            sauceId: selected.sauceId || undefined,
+            cheeseId: selected.cheeseId || undefined,
+            veggieIds: selected.veggieIds.length > 0 ? selected.veggieIds : undefined,
+            total: selected.quantity * currentFinalPrice,
         }
+        dispatch(createCart(item))
         navigate("/cart")
     }
 
     function getStar(star) {
-        if (star == "5")
-            return <span><i className='bi bi-star-fill text-warning'></i><i className='bi bi-star-fill text-warning'></i><i className='bi bi-star-fill text-warning'></i><i className='bi bi-star-fill text-warning'></i><i className='bi bi-star-fill text-warning'></i></span>
-        else if (star == "4")
-            return <span><i className='bi bi-star-fill text-warning'></i><i className='bi bi-star-fill text-warning'></i><i className='bi bi-star-fill text-warning'></i><i className='bi bi-star-fill text-warning'></i><i className='bi bi-star text-warning'></i></span>
-        else if (star == "3")
-            return <span><i className='bi bi-star-fill text-warning'></i><i className='bi bi-star-fill text-warning'></i><i className='bi bi-star-fill text-warning'></i><i className='bi bi-star text-warning'></i><i className='bi bi-star text-warning'></i></span>
-        else if (star == "2")
-            return <span><i className='bi bi-star-fill text-warning'></i><i className='bi bi-star-fill text-warning'></i><i className='bi bi-star text-warning'></i><i className='bi bi-star text-warning'></i><i className='bi bi-star text-warning'></i></span>
-        else
-            return <span><i className='bi bi-star-fill text-warning'></i><i className='bi bi-star text-warning'></i><i className='bi bi-star text-warning'></i><i className='bi bi-star text-warning'></i><i className='bi bi-star text-warning'></i></span>
+        const num = Number(star) || 5
+        return (
+            <span>
+                {[1, 2, 3, 4, 5].map(i => (
+                    <i key={i} className={`bi bi-star${i <= num ? '-fill text-warning' : ' text-warning'}`}></i>
+                ))}
+            </span>
+        )
     }
-
 
     function addToWishlist() {
         let userid = localStorage.getItem("userid")
@@ -171,7 +238,7 @@ export default function ProductPage() {
                 setData({ ...item })
                 setSelected(prev => ({
                     ...prev,
-                    size: item.size?.[0] || ""
+                    size: item.size?.[0] || "Medium"
                 }))
                 let targetCat = item.maincategory?.name || item.maincategory
                 setRelatedProducts(ProductStateData.filter(x => {
@@ -181,6 +248,7 @@ export default function ProductPage() {
             }
         }
     }, [ProductStateData, _id])
+
     return (
         <>
             <Breadcrum title={data.name ? data.name : "Product"} />
@@ -194,7 +262,7 @@ export default function ProductPage() {
                                         {(data.pic && data.pic.length > 0 ? data.pic : [""]).map((item, index) => {
                                             const imgSrc = item ? `${import.meta.env.VITE_APP_IMAGE_SERVER}${item}` : '/images/pizza_farmhouse.jpg'
                                             return <SwiperSlide key={index}>
-                                                <img src={imgSrc} height={400} style={{ objectFit: "cover" }} className='w-100 rounded' alt={data.name} />
+                                                <img src={imgSrc} height={400} style={{ objectFit: "cover" }} className='w-100 rounded shadow-sm' alt={data.name} />
                                             </SwiperSlide>
                                         })}
                                     </Swiper>
@@ -220,6 +288,7 @@ export default function ProductPage() {
 
                                     <h4 className="fw-bold mb-2">{data.name}</h4>
                                     <p className="mb-2 text-muted">Category: {data.maincategory?.name} {data.subcategory?.name ? `• ${data.subcategory?.name}` : ''} {data.brand?.name ? `• ${data.brand?.name}` : ''}</p>
+                                    
                                     <h5 className="fw-bold mb-3">
                                         <del className="text-muted me-2">&#8377;{currentBasePrice}</del>
                                         <span className="text-primary fs-4 me-2">&#8377;{currentFinalPrice}</span>
@@ -229,9 +298,16 @@ export default function ProductPage() {
                                         </span>
                                     </h5>
 
-                                    <p className="mb-3">{data.stock ? <span className="text-success"><i className="bi bi-check-circle-fill me-1"></i> Fresh & In Stock</span> : <span className="text-danger"><i className="bi bi-x-circle-fill me-1"></i> Out Of Stock</span>}</p>
-                                    <div className='mb-4'>
-                                        <h5 className="mb-2">Select Pizza Size: </h5>
+                                    <p className="mb-3">
+                                        {data.stock ? 
+                                            <span className="text-success"><i className="bi bi-check-circle-fill me-1"></i> Fresh & In Stock</span> : 
+                                            <span className="text-danger"><i className="bi bi-x-circle-fill me-1"></i> Out Of Stock</span>
+                                        }
+                                    </p>
+
+                                    {/* Size Selection */}
+                                    <div className='mb-3'>
+                                        <h6 className="mb-2 fw-bold">Select Pizza Size: </h6>
                                         <div className='d-flex flex-wrap gap-2'>
                                             {(data.size && data.size.length > 0 ? data.size : ["Small", "Medium", "Large", "Extra Large"]).map((item, index) => {
                                                 const szMeta = PIZZA_SIZE_METADATA[item] || { inches: "8 inches" }
@@ -241,36 +317,148 @@ export default function ProductPage() {
                                                     key={index}
                                                     type="button"
                                                     onClick={() => setSelected({ ...selected, size: item })}
-                                                    className={`btn py-2 px-3 ${selected.size === item ? 'btn-primary text-white shadow' : 'btn-outline-primary'}`}>
+                                                    className={`btn py-2 px-3 btn-sm ${selected.size === item ? 'btn-primary text-white shadow' : 'btn-outline-primary'}`}>
                                                     <span className="fw-bold">{item}</span> <small className="opacity-75">({szMeta.inches})</small>{priceText}
                                                 </button>
                                             })}
                                         </div>
                                     </div>
-                                    {data.stock ?
-                                        <div className="input-group quantity mb-3" style={{ width: "100px" }}>
+
+                                    {/* Customization Accordion (Crust, Sauce, Cheese, Toppings) */}
+                                    <div className="card border-primary-subtle mb-3">
+                                        <div 
+                                            className="card-header bg-light d-flex justify-content-between align-items-center cursor-pointer py-2"
+                                            onClick={() => setCustomizationOpen(!customizationOpen)}
+                                            style={{ cursor: "pointer" }}
+                                        >
+                                            <span className="fw-bold text-primary small">
+                                                <i className="bi bi-sliders me-2"></i>Customize Your Crust, Sauce, Cheese & Toppings
+                                            </span>
+                                            <i className={`bi bi-chevron-${customizationOpen ? 'up' : 'down'} text-primary`}></i>
+                                        </div>
+
+                                        {customizationOpen && (
+                                            <div className="card-body p-3">
+                                                {/* Crust Base */}
+                                                {customizationOptions.bases?.length > 0 && (
+                                                    <div className="mb-2">
+                                                        <label className="form-label small fw-bold mb-1">Crust Base:</label>
+                                                        <select 
+                                                            className="form-select form-select-sm"
+                                                            value={selected.baseId}
+                                                            onChange={e => setSelected({ ...selected, baseId: e.target.value })}
+                                                        >
+                                                            <option value="">Default Chef Crust (Standard)</option>
+                                                            {customizationOptions.bases.map(b => (
+                                                                <option key={b._id} value={b._id}>
+                                                                    {b.name} {b.price > 0 ? `(+₹${b.price})` : ''}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                )}
+
+                                                {/* Sauce */}
+                                                {customizationOptions.sauces?.length > 0 && (
+                                                    <div className="mb-2">
+                                                        <label className="form-label small fw-bold mb-1">Sauce:</label>
+                                                        <select 
+                                                            className="form-select form-select-sm"
+                                                            value={selected.sauceId}
+                                                            onChange={e => setSelected({ ...selected, sauceId: e.target.value })}
+                                                        >
+                                                            <option value="">Signature Marinara (Standard)</option>
+                                                            {customizationOptions.sauces.map(s => (
+                                                                <option key={s._id} value={s._id}>
+                                                                    {s.name} {s.price > 0 ? `(+₹${s.price})` : ''}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                )}
+
+                                                {/* Cheese */}
+                                                {customizationOptions.cheeses?.length > 0 && (
+                                                    <div className="mb-2">
+                                                        <label className="form-label small fw-bold mb-1">Cheese:</label>
+                                                        <select 
+                                                            className="form-select form-select-sm"
+                                                            value={selected.cheeseId}
+                                                            onChange={e => setSelected({ ...selected, cheeseId: e.target.value })}
+                                                        >
+                                                            <option value="">Classic Mozzarella (Standard)</option>
+                                                            {customizationOptions.cheeses.map(c => (
+                                                                <option key={c._id} value={c._id}>
+                                                                    {c.name} {c.price > 0 ? `(+₹${c.price})` : ''}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                )}
+
+                                                {/* Extra Veggies */}
+                                                {customizationOptions.veggies?.length > 0 && (
+                                                    <div className="mb-2">
+                                                        <label className="form-label small fw-bold mb-1">Extra Veggie Toppings:</label>
+                                                        <div className="d-flex flex-wrap gap-1">
+                                                            {customizationOptions.veggies.map(v => {
+                                                                const isChecked = selected.veggieIds.includes(v._id)
+                                                                return (
+                                                                    <button
+                                                                        type="button"
+                                                                        key={v._id}
+                                                                        onClick={() => toggleVeggie(v._id)}
+                                                                        className={`btn btn-sm ${isChecked ? 'btn-success text-white' : 'btn-outline-secondary'}`}
+                                                                        style={{ fontSize: "0.75rem", padding: "2px 8px" }}
+                                                                    >
+                                                                        {isChecked && <i className="bi bi-check me-1"></i>}
+                                                                        {v.name} {v.price > 0 ? `(+₹${v.price})` : ''}
+                                                                    </button>
+                                                                )
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {serverPrice && (
+                                                    <div className="alert alert-light border small py-1 px-2 mt-2 mb-0 text-muted">
+                                                        <i className="bi bi-shield-check text-success me-1"></i>
+                                                        Server price calculated: <strong>₹{serverPrice.unitPrice}</strong> / pizza
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Quantity & Actions */}
+                                    {data.stock ? (
+                                        <div className="input-group quantity mb-3" style={{ width: "120px" }}>
                                             <div className="input-group-btn">
                                                 <button className="btn btn-sm btn-minus rounded-circle bg-light border" onClick={() => selected.quantity > 1 ? setSelected({ ...selected, quantity: selected.quantity - 1 }) : null}>
                                                     <i className="fa fa-minus"></i>
                                                 </button>
                                             </div>
-                                            <input type="text" className="form-control form-control-sm text-center border-0" value={selected.quantity} />
+                                            <input type="text" readOnly className="form-control form-control-sm text-center border-0 fw-bold" value={selected.quantity} />
                                             <div className="input-group-btn">
-                                                <button className="btn btn-sm btn-plus rounded-circle bg-light border" onClick={() => selected.quantity < data.stockQuantity ? setSelected({ ...selected, quantity: selected.quantity + 1 }) : null}>
+                                                <button className="btn btn-sm btn-plus rounded-circle bg-light border" onClick={() => selected.quantity < (data.stockQuantity || 10) ? setSelected({ ...selected, quantity: selected.quantity + 1 }) : null}>
                                                     <i className="fa fa-plus"></i>
                                                 </button>
                                             </div>
-                                        </div> : null}
+                                        </div>
+                                    ) : null}
+
                                     <div className='btn-group'>
-                                        {data.stock ?
-                                            <button className="btn btn-primary border px-4 py-2 mb-4 text-primary" onClick={addToCart}>
-                                                <i className="bi bi-cart-plus fs-5 me-2 text-white"></i> Add to cart
-                                            </button> : null}
+                                        {data.stock ? (
+                                            <button className="btn btn-primary border px-4 py-2 mb-4 text-white" onClick={addToCart}>
+                                                <i className="bi bi-cart-plus fs-5 me-2 text-white"></i> Add to cart (₹{selected.quantity * currentFinalPrice})
+                                            </button>
+                                        ) : null}
                                         <button className="btn btn-success border px-4 py-2 mb-4 text-light" onClick={addToWishlist}>
                                             <i className="bi bi-heart fs-5 me-2 text-white"></i> Add to Wishlist
                                         </button>
                                     </div>
                                 </div>
+
                                 <div className="col-lg-12">
                                     <nav>
                                         <div className="nav nav-tabs mb-3">
@@ -279,7 +467,7 @@ export default function ProductPage() {
                                                 aria-controls="nav-about" aria-selected="true">Description</button>
                                             <button className="nav-link border-white border-bottom-0" type="button" role="tab"
                                                 id="nav-mission-tab" data-bs-toggle="tab" data-bs-target="#nav-mission"
-                                                aria-controls="nav-mission" aria-selected="false">Reviews</button>
+                                                aria-controls="nav-mission" aria-selected="false">Reviews ({review.length})</button>
                                         </div>
                                     </nav>
                                     <div className="tab-content mb-5">
@@ -291,18 +479,18 @@ export default function ProductPage() {
                                             aria-labelledby="nav-mission-tab">
                                             {review.length ?
                                                 review.map(item => {
-                                                    return <div className="d-flex card p-4" key={item._id}>
+                                                    return <div className="d-flex card p-4 mb-2 shadow-sm" key={item._id}>
                                                         <div className="">
-                                                            <div className="d-flex justify-content-between">
-                                                                <h5>{item.user?.name}</h5>
+                                                            <div className="d-flex justify-content-between align-items-center mb-1">
+                                                                <h6 className="mb-0 fw-bold">{item.user?.name || item.name || "Happy Customer"}</h6>
                                                                 {getStar(item.star)}
                                                             </div>
-                                                            <p>{item.message}</p>
+                                                            <p className="mb-0 text-muted">{item.message}</p>
                                                         </div>
                                                     </div>
                                                 }) :
-                                                <div className='card p-5'>
-                                                    No Reviews
+                                                <div className='card p-5 text-center text-muted'>
+                                                    No reviews yet for this pizza. Order and be the first to review!
                                                 </div>}
                                         </div>
                                     </div>

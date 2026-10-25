@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-
+import { getUserAddressesApi, addUserAddressApi, deleteUserAddressApi } from '../../Redux/Sagas/Service'
 
 const inputOptions = {
   name: "",
@@ -11,21 +11,45 @@ const inputOptions = {
   city: "",
   state: "",
 }
+
 export default function Address() {
   let [showModal, setShowModal] = useState(false)
   let [option, setOption] = useState({})
-  let [flag, setFlag] = useState(false)
-
+  let [addresses, setAddresses] = useState([])
+  let [loading, setLoading] = useState(false)
   let [inputData, setInputData] = useState({ ...inputOptions })
 
-  let [data, setData] = useState({ address: [] })
   let navigate = useNavigate()
+
+  async function loadAddresses() {
+    setLoading(true)
+    try {
+      const res = await getUserAddressesApi()
+      if (res.result === "Done" && Array.isArray(res.data)) {
+        setAddresses(res.data)
+      } else {
+        // Fallback to reading from user record
+        const userRes = await fetch(`${import.meta.env.VITE_APP_BACKEND_SERVER}/user/${localStorage.getItem("userid")}`, {
+          headers: {
+            "content-type": "application/json",
+            "authorization": localStorage.getItem("token")
+          }
+        })
+        const data = await userRes.json()
+        if (data.result === "Done" && data.data?.address) {
+          setAddresses(data.data.address)
+        }
+      }
+    } catch {
+      // Ignore network errors
+    } finally {
+      setLoading(false)
+    }
+  }
 
   function create() {
     setShowModal(true)
-    setOption({
-      type: "Create"
-    })
+    setOption({ type: "Create" })
     setInputData({ ...inputOptions })
   }
 
@@ -35,9 +59,8 @@ export default function Address() {
       type: "Update",
       index: index
     })
-    setInputData({ ...data.address[index] })
+    setInputData({ ...addresses[index] })
   }
-
 
   function getInputData(e) {
     let { name, value } = e.target
@@ -45,133 +68,177 @@ export default function Address() {
   }
 
   async function deleteRecord(index) {
-    if (window.confirm("Are You Sure You Want To Delete That Record?")) {
-      let updatedAddresses = (data.address || []).filter((_, idx) => idx !== index)
-      let updatedUser = { ...data, address: updatedAddresses }
-
-      let response = await fetch(`${import.meta.env.VITE_APP_BACKEND_SERVER}/user/${localStorage.getItem("userid")}`, {
-        method: "PUT",
-        headers: {
-          "content-type": "application/json",
-          authorization: localStorage.getItem("token")
-        },
-        body: JSON.stringify(updatedUser)
-      })
-      let resData = await response.json()
-      if (resData.result === "Done") {
-        setData(updatedUser)
+    if (window.confirm("Are you sure you want to delete this address?")) {
+      try {
+        const res = await deleteUserAddressApi(index)
+        if (res.result === "Done" && Array.isArray(res.data)) {
+          setAddresses(res.data)
+        } else {
+          // Fallback
+          const updated = addresses.filter((_, idx) => idx !== index)
+          await fetch(`${import.meta.env.VITE_APP_BACKEND_SERVER}/user/${localStorage.getItem("userid")}`, {
+            method: "PUT",
+            headers: {
+              "content-type": "application/json",
+              "authorization": localStorage.getItem("token")
+            },
+            body: JSON.stringify({ address: updated })
+          })
+          setAddresses(updated)
+        }
+      } catch (err) {
+        alert("Failed to delete address: " + err.message)
       }
-      setFlag(!flag)
     }
   }
 
   async function postData(e) {
     e.preventDefault()
-    let currentAddresses = data.address ? [...data.address] : []
-    let updatedAddresses = option.type === "Create"
-      ? [...currentAddresses, { ...inputData }]
-      : currentAddresses.map((addr, idx) => idx === option.index ? { ...inputData } : addr)
-
-    let updatedUser = { ...data, address: updatedAddresses }
-
-    let response = await fetch(`${import.meta.env.VITE_APP_BACKEND_SERVER}/user/${localStorage.getItem("userid")}`, {
-      method: "PUT",
-      headers: {
-        "content-type": "application/json",
-        "authorization": localStorage.getItem("token")
-      },
-      body: JSON.stringify(updatedUser)
-    })
-    let resData = await response.json()
-    if (resData.result === "Done") {
-      setData(updatedUser)
+    try {
+      if (option.type === "Create") {
+        const res = await addUserAddressApi(inputData)
+        if (res.result === "Done" && Array.isArray(res.data)) {
+          setAddresses(res.data)
+        } else {
+          // Fallback to PUT /user/:id
+          const updated = [...addresses, { ...inputData }]
+          await fetch(`${import.meta.env.VITE_APP_BACKEND_SERVER}/user/${localStorage.getItem("userid")}`, {
+            method: "PUT",
+            headers: {
+              "content-type": "application/json",
+              "authorization": localStorage.getItem("token")
+            },
+            body: JSON.stringify({ address: updated })
+          })
+          setAddresses(updated)
+        }
+      } else {
+        // Update existing address index
+        const updated = addresses.map((addr, idx) => idx === option.index ? { ...inputData } : addr)
+        await fetch(`${import.meta.env.VITE_APP_BACKEND_SERVER}/user/${localStorage.getItem("userid")}`, {
+          method: "PUT",
+          headers: {
+            "content-type": "application/json",
+            "authorization": localStorage.getItem("token")
+          },
+          body: JSON.stringify({ address: updated })
+        })
+        setAddresses(updated)
+      }
+      setShowModal(false)
+      setInputData(inputOptions)
+    } catch (err) {
+      alert("Failed to save address: " + err.message)
     }
-    setShowModal(false)
-    setInputData(inputOptions)
   }
 
   useEffect(() => {
-    (async () => {
-      let response = await fetch(`${import.meta.env.VITE_APP_BACKEND_SERVER}/user/${localStorage.getItem("userid")}`, {
-        method: "GET",
-        headers: {
-          "content-type": "application/json",
-          "authorization": localStorage.getItem("token")
-        }
-      })
-      response = await response.json()
-      if (response.result === "Done")
-        setData({...response.data})
-      else
-        navigate("/login")
-    })()
+    if (!localStorage.getItem("token")) {
+      navigate("/login")
+      return
+    }
+    loadAddresses()
   }, [])
+
   return (
     <>
       <div>
-        <div className='float-end'>
-          <button className='btn btn-primary' onClick={create}>Add New Address</button>
-        </div>
-        <div>
-          {data.address?.map((item, index) => {
-            return <div className='card p-3 w-75' key={index}>
-              <p>{item.name}</p>
-              <p>{item.email},{item.phone}</p>
-              <p>{item.address}</p>
-              <p>{item.pin},{item.city},{item.state}</p>
-              <div className='btn-group position-absolute end-0'>
-                <button className='btn btn-primary' onClick={() => update(index)}><i className='bi bi-pencil'></i></button>
-                <button className='btn btn-danger' onClick={() => deleteRecord(index)}><i className='bi bi-x'></i></button>
-              </div>
-            </div>
-          })}
+        <div className='d-flex justify-content-between align-items-center mb-3'>
+          <h5 className="mb-0">Saved Delivery Addresses</h5>
+          <button className='btn btn-primary btn-sm' onClick={create}>
+            <i className="bi bi-plus-lg me-1"></i> Add New Address
+          </button>
         </div>
 
+        {loading ? (
+          <div className="text-center py-4">
+            <div className="spinner-border spinner-border-sm text-primary" role="status"></div>
+            <span className="ms-2 small text-muted">Loading addresses...</span>
+          </div>
+        ) : (
+          <div className="row g-3">
+            {addresses && addresses.length > 0 ? (
+              addresses.map((item, index) => {
+                return (
+                  <div className='col-md-6' key={index}>
+                    <div className='card p-3 h-100 shadow-sm border position-relative'>
+                      <div className="d-flex justify-content-between align-items-start mb-2">
+                        <strong className="text-primary">{item.name || "Default Contact"}</strong>
+                        <div className='btn-group'>
+                          <button className='btn btn-sm btn-outline-primary' title="Edit" onClick={() => update(index)}>
+                            <i className='bi bi-pencil'></i>
+                          </button>
+                          <button className='btn btn-sm btn-outline-danger' title="Delete" onClick={() => deleteRecord(index)}>
+                            <i className='bi bi-trash'></i>
+                          </button>
+                        </div>
+                      </div>
+                      <p className="mb-1 small text-muted"><i className="bi bi-envelope me-1"></i>{item.email} | <i className="bi bi-phone me-1"></i>{item.phone}</p>
+                      <p className="mb-1 small"><i className="bi bi-geo-alt me-1 text-danger"></i>{item.address}</p>
+                      <p className="mb-0 small text-muted">{item.city}, {item.state} - <strong>{item.pin}</strong></p>
+                    </div>
+                  </div>
+                )
+              })
+            ) : (
+              <div className="col-12">
+                <div className="card p-4 text-center text-muted">
+                  <i className="bi bi-geo-alt fs-1 text-secondary mb-2"></i>
+                  <p className="mb-2">No delivery addresses saved yet.</p>
+                  <button className="btn btn-outline-primary btn-sm mx-auto" onClick={create}>Add Your First Address</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className={`modal fade ${showModal ? 'show d-block' : ''}`} id="exampleModal">
-          <div className="modal-dialog  modal-dialog-scrollable">
+          <div className="modal-dialog modal-dialog-scrollable">
             <div className="modal-content">
               <div className="modal-header">
-                <h5 className="modal-title" id="exampleModalLabel">{option.type}</h5>
-                <button type="button" className="btn-close" data-bs-dismiss="modal" aria-label="Close" onClick={() => setShowModal(false)}></button>
+                <h5 className="modal-title" id="exampleModalLabel">{option.type} Address</h5>
+                <button type="button" className="btn-close" aria-label="Close" onClick={() => setShowModal(false)}></button>
               </div>
               <div className="modal-body">
                 <form onSubmit={postData}>
-                  <div className="row">
-                    <div className="col-12 mb-3">
-                      {/* <label>Name*</label> */}
+                  <div className="row g-2">
+                    <div className="col-12 mb-2">
+                      <label className="form-label small fw-bold">Full Name*</label>
                       <input type="text" name="name" value={inputData.name} onChange={getInputData} required placeholder='Full Name' className='form-control border-primary' />
                     </div>
 
-                    <div className="col-md-6 mb-3">
-                      {/* <label>Email*</label> */}
-                      <input type="email" name="email" value={inputData.email} onChange={getInputData} required placeholder='Eamil Address' className='form-control border-primary' />
+                    <div className="col-md-6 mb-2">
+                      <label className="form-label small fw-bold">Email Address*</label>
+                      <input type="email" name="email" value={inputData.email} onChange={getInputData} required placeholder='Email Address' className='form-control border-primary' />
                     </div>
 
-                    <div className="col-md-6 mb-3">
-                      {/* <label>Phone Number*</label> */}
+                    <div className="col-md-6 mb-2">
+                      <label className="form-label small fw-bold">Phone Number*</label>
                       <input type="text" name="phone" value={inputData.phone} onChange={getInputData} required placeholder='Phone Number' className='form-control border-primary' />
                     </div>
 
-                    <div className="col-12 mb-3">
-                      {/* <label>Address*</label> */}
-                      <textarea name="address" required value={inputData.address} onChange={getInputData} placeholder='Address' className='form-control border-primary' />
+                    <div className="col-12 mb-2">
+                      <label className="form-label small fw-bold">Street Address*</label>
+                      <textarea name="address" required value={inputData.address} onChange={getInputData} placeholder='House/Flat No., Street, Landmark' className='form-control border-primary' rows={2} />
                     </div>
 
-                    <div className="col-6 mb-3">
-                      {/* <label>Pin*</label> */}
-                      <input type="pin" name="pin" required value={inputData.pin} onChange={getInputData} placeholder='Pin Code' className='form-control border-primary' />
+                    <div className="col-4 mb-2">
+                      <label className="form-label small fw-bold">Pin Code*</label>
+                      <input type="text" name="pin" required value={inputData.pin} onChange={getInputData} placeholder='Pin Code' className='form-control border-primary' />
                     </div>
 
-                    <div className="col-6 mb-3">
-                      {/* <label>City Name*</label> */}
+                    <div className="col-4 mb-2">
+                      <label className="form-label small fw-bold">City*</label>
                       <input type="text" name="city" required value={inputData.city} onChange={getInputData} placeholder='City Name' className='form-control border-primary' />
                     </div>
-                    <div className="col-12 mb-3">
-                      {/* <label>State*</label> */}
+
+                    <div className="col-4 mb-2">
+                      <label className="form-label small fw-bold">State*</label>
                       <input type="text" name="state" required value={inputData.state} onChange={getInputData} placeholder='State Name' className='form-control border-primary' />
                     </div>
-                    <div className="modal-footer">
-                      <button type="submit" className="btn btn-primary w-100">{option.type}</button>
+
+                    <div className="col-12 mt-3">
+                      <button type="submit" className="btn btn-primary w-100">{option.type} Address</button>
                     </div>
                   </div>
                 </form>

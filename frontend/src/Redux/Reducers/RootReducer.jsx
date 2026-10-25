@@ -13,10 +13,12 @@ import TestimonialReducer from "./TestimonialReducer";
 import NewsletterReducer from "./NewsletterReducer";
 import ContactUsReducer from "./ContactUsReducer";
 import UserReducer from "./UserReducer";
+import CategoryReducer from "./CategoryReducer";
 
 export default combineReducers({
     MaincategoryStateData: MaincategoryReducer,
     SubcategoryStateData: SubcategoryReducer,
+    CategoryStateData: CategoryReducer,
     BrandStateData: BrandReducer,
     ProductStateData: ProductReducer,
     FeatureStateData: FeatureReducer,

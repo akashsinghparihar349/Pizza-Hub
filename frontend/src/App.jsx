@@ -17,6 +17,9 @@ import ContactUsPage from './Pages/ContactUsPage'
 import PrivacyPolicy from './Pages/PrivacyPolicy'
 import TermsAndConditions from './Pages/TermsAndConditions'
 import ReturnAndRefundPolicy from './Pages/ReturnAndRefundPolicy'
+import RestaurantApplyPage from './Pages/RestaurantApplyPage'
+import RestaurantDashboardPage from './Pages/RestaurantDashboardPage'
+import NewsletterUnsubscribePage from './Pages/NewsletterUnsubscribePage'
 
 import SignupPage from './Pages/User/SignupPage'
 import LoginPage from './Pages/User/LoginPage'
@@ -28,6 +31,15 @@ import OrderConfirmation from './Pages/User/OrderConfirmation'
 import Payment from './Pages/User/Payment'
 
 import AdminHomePage from './Pages/Admin/AdminHomePage'
+
+import AdminCategoryPage from './Pages/Admin/Category/AdminCategoryPage'
+import AdminCategoryCreatePage from './Pages/Admin/Category/AdminCategoryCreatePage'
+import AdminCategoryUpdatePage from './Pages/Admin/Category/AdminCategoryUpdatePage'
+
+import AdminCustomizationPage from './Pages/Admin/Customization/AdminCustomizationPage'
+import AdminInventoryPage from './Pages/Admin/Inventory/AdminInventoryPage'
+import AdminRestaurantPage from './Pages/Admin/Restaurant/AdminRestaurantPage'
+import AdminTestimonialPage from './Pages/Admin/Testimonial/AdminTestimonialPage'
 
 import AdminMaincategoryPage from './Pages/Admin/Maincategory/AdminMaincategoryPage'
 import AdminMaincategoryCreatePage from './Pages/Admin/Maincategory/AdminMaincategoryCreatePage'
@@ -67,9 +79,6 @@ import AdminUserPage from './Pages/Admin/User/AdminUserPage'
 import AdminUserCreatePage from './Pages/Admin/User/AdminUserCreatePage'
 import AdminUserUpdatePage from './Pages/Admin/User/AdminUserUpdatePage'
 
-
-
-
 export default function App() {
   return (
     <BrowserRouter>
@@ -84,6 +93,8 @@ export default function App() {
         <Route path='/faq' element={<FaqPage />} />
         <Route path='/testimonial' element={<TestimonialPage />} />
         <Route path='/contact' element={<ContactUsPage />} />
+        <Route path='/partner-with-us' element={<RestaurantApplyPage />} />
+        <Route path='/newsletter/unsubscribe/:_id' element={<NewsletterUnsubscribePage />} />
 
         <Route path='/privacy-policy' element={<PrivacyPolicy />} />
         <Route path='/tc' element={<TermsAndConditions />} />
@@ -95,9 +106,6 @@ export default function App() {
         <Route path='/forget-password-2' element={<ForgetPasswordPage2 />} />
         <Route path='/forget-password-3' element={<ForgetPasswordPage3 />} />
 
-
-        {/* User Routes */}
-
         {/* User Protected Routes */}
         <Route path='/profile' element={<ProfilePage />} />
         <Route path='/cart' element={<CartPage />} />
@@ -105,8 +113,20 @@ export default function App() {
         <Route path='/order-confirmation' element={<OrderConfirmation />} />
         <Route path='/payment/:_id' element={<Payment />} />
 
+        {/* Restaurant Partner Portal */}
+        <Route path='/restaurant/dashboard' element={<RestaurantDashboardPage />} />
+
         {/* Admin Protected Routes */}
         <Route path='/admin' element={<AdminHomePage />} />
+
+        <Route path='/admin/category' element={<AdminCategoryPage />} />
+        <Route path='/admin/category/create' element={<AdminCategoryCreatePage />} />
+        <Route path='/admin/category/update/:_id' element={<AdminCategoryUpdatePage />} />
+
+        <Route path='/admin/customization' element={<AdminCustomizationPage />} />
+        <Route path='/admin/inventory' element={<AdminInventoryPage />} />
+        <Route path='/admin/restaurant' element={<AdminRestaurantPage />} />
+        <Route path='/admin/testimonial' element={<AdminTestimonialPage />} />
 
         <Route path='/admin/maincategory' element={<AdminMaincategoryPage />} />
         <Route path='/admin/maincategory/create' element={<AdminMaincategoryCreatePage />} />
@@ -146,10 +166,7 @@ export default function App() {
         <Route path='/admin/user/create' element={<AdminUserCreatePage />} />
         <Route path='/admin/user/update/:_id' element={<AdminUserUpdatePage />} />
 
-
-
         <Route path='/*' element={<ErrorPage />} />
-
       </Routes>
       <Footer />
     </BrowserRouter>
